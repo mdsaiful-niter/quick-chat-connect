@@ -1,14 +1,33 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useState } from "react";
+import RoomEntry from "@/components/RoomEntry";
+import ChatRoom from "@/components/ChatRoom";
 
 const Index = () => {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
-      </div>
-    </div>
-  );
+  const [roomData, setRoomData] = useState<{
+    roomCode: string;
+    username: string;
+    isCreator: boolean;
+  } | null>(null);
+
+  const handleJoinRoom = (roomCode: string, username: string, isCreator: boolean) => {
+    setRoomData({ roomCode, username, isCreator });
+  };
+
+  const handleLeave = () => {
+    setRoomData(null);
+  };
+
+  if (roomData) {
+    return (
+      <ChatRoom
+        roomCode={roomData.roomCode}
+        username={roomData.username}
+        onLeave={handleLeave}
+      />
+    );
+  }
+
+  return <RoomEntry onJoinRoom={handleJoinRoom} />;
 };
 
 export default Index;
