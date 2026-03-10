@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MessageCircle, Users, ArrowRight, Sparkles } from "lucide-react";
-import { generateRoomCode, createRoom, checkRoomExists, joinRoom } from "@/lib/firebase";
+import { generateRoomCode } from "@/lib/peer-chat";
 import { toast } from "sonner";
 
 interface RoomEntryProps {
@@ -13,52 +13,26 @@ const RoomEntry = ({ onJoinRoom }: RoomEntryProps) => {
   const [mode, setMode] = useState<"choice" | "create" | "join">("choice");
   const [roomCode, setRoomCode] = useState("");
   const [username, setUsername] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleCreate = async () => {
+  const handleCreate = () => {
     if (!username.trim()) {
       toast.error("Please enter your name");
       return;
     }
-    
-    setIsLoading(true);
-    try {
-      const code = generateRoomCode();
-      await createRoom(code, username.trim());
-      onJoinRoom(code, username.trim(), true);
-      toast.success(`Room ${code} created!`);
-    } catch (error) {
-      toast.error("Failed to create room");
-    } finally {
-      setIsLoading(false);
-    }
+    const code = generateRoomCode();
+    onJoinRoom(code, username.trim(), true);
   };
 
-  const handleJoin = async () => {
+  const handleJoin = () => {
     if (!username.trim()) {
       toast.error("Please enter your name");
       return;
     }
-    if (!roomCode.trim()) {
-      toast.error("Please enter a room code");
+    if (!roomCode.trim() || roomCode.trim().length < 6) {
+      toast.error("Please enter a valid 6-character room code");
       return;
     }
-
-    setIsLoading(true);
-    try {
-      const exists = await checkRoomExists(roomCode.toUpperCase());
-      if (!exists) {
-        toast.error("Room not found");
-        return;
-      }
-      await joinRoom(roomCode.toUpperCase(), username.trim());
-      onJoinRoom(roomCode.toUpperCase(), username.trim(), false);
-      toast.success("Joined room!");
-    } catch (error) {
-      toast.error("Failed to join room");
-    } finally {
-      setIsLoading(false);
-    }
+    onJoinRoom(roomCode.toUpperCase().trim(), username.trim(), false);
   };
 
   return (
@@ -124,10 +98,9 @@ const RoomEntry = ({ onJoinRoom }: RoomEntryProps) => {
                 
                 <Button
                   onClick={handleCreate}
-                  disabled={isLoading}
                   className="w-full h-12 text-lg font-display bg-gradient-to-r from-primary to-accent hover:opacity-90"
                 >
-                  {isLoading ? "Creating..." : "Create & Get Code"}
+                  Create & Get Code
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </div>
@@ -168,10 +141,9 @@ const RoomEntry = ({ onJoinRoom }: RoomEntryProps) => {
                 
                 <Button
                   onClick={handleJoin}
-                  disabled={isLoading}
                   className="w-full h-12 text-lg font-display bg-gradient-to-r from-primary to-accent hover:opacity-90"
                 >
-                  {isLoading ? "Joining..." : "Join Room"}
+                  Join Room
                   <ArrowRight className="w-5 h-5 ml-2" />
                 </Button>
               </div>
@@ -180,7 +152,7 @@ const RoomEntry = ({ onJoinRoom }: RoomEntryProps) => {
         </div>
 
         <p className="text-center text-muted-foreground/60 text-sm mt-6 animate-slide-up" style={{ animationDelay: "0.2s" }}>
-          No account needed • End-to-end simple
+          No account needed • Peer-to-peer • Free forever
         </p>
       </div>
     </div>
