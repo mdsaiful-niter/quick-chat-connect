@@ -22,6 +22,7 @@ const Index = () => {
       <ChatRoom
         roomCode={roomData.roomCode}
         username={roomData.username}
+        isCreator={roomData.isCreator}
         onLeave={handleLeave}
       />
     );

@@ -1,40 +1,79 @@
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Send, Copy, LogOut, Check } from "lucide-react";
-import { sendMessage, subscribeToMessages, Message } from "@/lib/firebase";
+import { Send, Copy, LogOut, Check, Wifi, WifiOff } from "lucide-react";
+import { createRoom, joinRoom, sendMessage, disconnect, ChatMessage } from "@/lib/peer-chat";
 import { toast } from "sonner";
 
 interface ChatRoomProps {
   roomCode: string;
   username: string;
+  isCreator: boolean;
   onLeave: () => void;
 }
 
-const ChatRoom = ({ roomCode, username, onLeave }: ChatRoomProps) => {
-  const [messages, setMessages] = useState<Message[]>([]);
+const ChatRoom = ({ roomCode, username, isCreator, onLeave }: ChatRoomProps) => {
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState("");
   const [copied, setCopied] = useState(false);
+  const [connected, setConnected] = useState(false);
+  const [connecting, setConnecting] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const unsubscribe = subscribeToMessages(roomCode, setMessages);
-    return () => unsubscribe();
-  }, [roomCode]);
+    const handlers = {
+      onMessage: (msg: ChatMessage) => {
+        setMessages((prev) => [...prev, msg]);
+      },
+      onConnection: () => {
+        setConnected(true);
+        toast.success("Someone joined the room!");
+      },
+      onDisconnection: () => {
+        setConnected(false);
+        toast.info("The other person disconnected");
+      },
+      onError: (error: string) => {
+        toast.error(error);
+      },
+    };
+
+    const connect = async () => {
+      try {
+        if (isCreator) {
+          await createRoom(roomCode, handlers);
+          setConnecting(false);
+          toast.success(`Room ${roomCode} created! Waiting for someone to join...`);
+        } else {
+          await joinRoom(roomCode, handlers);
+          setConnecting(false);
+          setConnected(true);
+          toast.success("Connected!");
+        }
+      } catch (error: any) {
+        toast.error(error.message || "Failed to connect");
+        setConnecting(false);
+        onLeave();
+      }
+    };
+
+    connect();
+
+    return () => {
+      disconnect();
+    };
+  }, [roomCode, isCreator, onLeave]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  const handleSend = async () => {
+  const handleSend = () => {
     if (!newMessage.trim()) return;
-    
-    try {
-      await sendMessage(roomCode, newMessage.trim(), username);
-      setNewMessage("");
-    } catch (error) {
-      toast.error("Failed to send message");
-    }
+
+    const msg = sendMessage(newMessage.trim(), username);
+    setMessages((prev) => [...prev, msg]);
+    setNewMessage("");
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -51,12 +90,30 @@ const ChatRoom = ({ roomCode, username, onLeave }: ChatRoomProps) => {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleLeave = () => {
+    disconnect();
+    onLeave();
+  };
+
   const formatTime = (timestamp: number) => {
-    return new Date(timestamp).toLocaleTimeString([], { 
-      hour: "2-digit", 
-      minute: "2-digit" 
+    return new Date(timestamp).toLocaleTimeString([], {
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
+
+  if (connecting) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground">
+            {isCreator ? "Creating room..." : "Connecting to room..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -66,17 +123,28 @@ const ChatRoom = ({ roomCode, username, onLeave }: ChatRoomProps) => {
           <Button
             variant="ghost"
             size="icon"
-            onClick={onLeave}
+            onClick={handleLeave}
             className="hover:bg-destructive/20 hover:text-destructive"
           >
             <LogOut className="w-5 h-5" />
           </Button>
           <div>
             <h1 className="font-display font-semibold text-lg">QuickChat</h1>
-            <p className="text-xs text-muted-foreground">Welcome, {username}</p>
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-muted-foreground">Welcome, {username}</p>
+              {connected ? (
+                <span className="flex items-center gap-1 text-xs text-green-500">
+                  <Wifi className="w-3 h-3" /> Connected
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-xs text-muted-foreground">
+                  <WifiOff className="w-3 h-3" /> Waiting...
+                </span>
+              )}
+            </div>
           </div>
         </div>
-        
+
         <button
           onClick={copyRoomCode}
           className="flex items-center gap-2 glass px-3 py-2 rounded-lg hover:bg-secondary/80 transition-colors group"
@@ -99,7 +167,9 @@ const ChatRoom = ({ roomCode, username, onLeave }: ChatRoomProps) => {
             </div>
             <p className="text-muted-foreground mb-2">No messages yet</p>
             <p className="text-sm text-muted-foreground/60">
-              Share the code <span className="text-primary font-mono">{roomCode}</span> with someone to start chatting
+              {isCreator
+                ? <>Share the code <span className="text-primary font-mono">{roomCode}</span> with someone to start chatting</>
+                : "Say hello to start the conversation!"}
             </p>
           </div>
         )}
@@ -132,14 +202,15 @@ const ChatRoom = ({ roomCode, username, onLeave }: ChatRoomProps) => {
           <Input
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="Type a message..."
+            onKeyDown={handleKeyPress}
+            placeholder={connected ? "Type a message..." : "Waiting for someone to join..."}
             className="flex-1 h-12 glass border-border/50 focus:border-primary"
             maxLength={500}
+            disabled={!connected}
           />
           <Button
             onClick={handleSend}
-            disabled={!newMessage.trim()}
+            disabled={!newMessage.trim() || !connected}
             className="h-12 px-6 bg-gradient-to-r from-primary to-accent hover:opacity-90 disabled:opacity-50"
           >
             <Send className="w-5 h-5" />
